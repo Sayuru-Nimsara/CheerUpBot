@@ -31,7 +31,7 @@ def mouth_aspect_ratio(mouth):
 
 # Define thresholds for EAR and MAR
 EAR_THRESHOLD = 0.23
-MAR_THRESHOLD = 0.3
+MAR_THRESHOLD = 0.31
 
 # Capture video from the webcam
 cap = cv2.VideoCapture(0)
