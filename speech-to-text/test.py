@@ -1,7 +1,5 @@
 import pyaudio
 import wave
-import keyboard
-import time
 import os
 from faster_whisper import WhisperModel
 
