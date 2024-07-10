@@ -7,7 +7,17 @@ from scipy.spatial import distance as dist
 detector = dlib.get_frontal_face_detector()
 
 # Load the pre-trained facial landmark predictor
-predictor = dlib.shape_predictor('shape_predictor_68_face_landmarks.dat')
+import os
+
+# Get the absolute path to the shape predictor file
+shape_predictor_path = os.path.join(os.path.dirname(__file__), 'shape_predictor_68_face_landmarks.dat')
+
+# Check if the file exists
+if not os.path.exists(shape_predictor_path):
+    raise FileNotFoundError("shape_predictor_68_face_landmarks.dat not found")
+
+# Load the pre-trained facial landmark predictor
+predictor = dlib.shape_predictor(shape_predictor_path)
 
 
 # Function to compute the Eye Aspect Ratio (EAR)
