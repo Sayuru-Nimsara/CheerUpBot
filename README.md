@@ -22,4 +22,6 @@ To run the voice-chat.py
 pip install -q -U google-generativeai    
 pip install speechrecognition openai pyttsx3 pyaudio pygame
 pip install setuptools
+pip install emoji
+
 ```
