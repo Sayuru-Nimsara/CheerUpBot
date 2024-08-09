@@ -1,7 +1,12 @@
+import threading
+
 import cv2
 import dlib
 import numpy as np
 from scipy.spatial import distance as dist
+import time
+from newChat import main as startConversation
+
 
 # Load dlib's pre-trained face detector
 detector = dlib.get_frontal_face_detector()
@@ -32,9 +37,23 @@ def mouth_aspect_ratio(mouth):
 # Define thresholds for EAR and MAR
 EAR_THRESHOLD = 0.23
 MAR_THRESHOLD = 0.31
+BLINK_THRESHOLD = 40
+TIME_WINDOW = 5  # seconds
+
+# Flag to determine if voice chat is active
+voice_chat_active = False
+
+# function to reset voice_chat_active flag
+def reset_voice_chat_flag():
+    global voice_chat_active
+    voice_chat_active = False
+
+# Initialize blink counter and timer
+blink_count = 0
+start_time = time.time()
 
 # Capture video from the webcam
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(1)
 
 while True:
     ret, frame = cap.read()
@@ -57,22 +76,33 @@ while True:
         right_ear = compute_ear(right_eye)
         ear = (left_ear + right_ear) / 2.0
 
-        # Debugging: Print EAR value
-        print(f"Left EAR: {left_ear}, Right EAR: {right_ear}, Average EAR: {ear}")
-
         # Extract mouth landmarks
         mouth = landmarks[48:68]
         mar = mouth_aspect_ratio(mouth)
 
-        # Debugging: Print MAR value
-        print(f"MAR: {mar}")
-
-        # Check for boredom indicators
+        # Check if the person is blinking
         if ear < EAR_THRESHOLD:
-            cv2.putText(frame, "Boredom detected: Eyes Closed", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255),
-                        2)
-        if mar > MAR_THRESHOLD:
-            cv2.putText(frame, "Boredom detected: Yawning", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            blink_count += 1
+            print(f"Blink count: {blink_count}")
+
+        # Check if blinking threshold is reached within the time window or detect yawing
+        elapsed_time = time.time() - start_time
+        if elapsed_time > TIME_WINDOW:
+            if blink_count >= BLINK_THRESHOLD or mar > MAR_THRESHOLD:
+                if not voice_chat_active:  # Start voice chat only if not already active
+                    print("Boredom detected! Activating voice chat...")
+                    voice_chat_active = True
+                    # Trigger for voice-chat
+                    threading.Thread(target=startConversation).start()
+                    #cv2.putText(frame, "Boredom detected: Excessive Blinking", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                    # Reset the flag after the voice chat ends
+                    threading.Thread(target=reset_voice_chat_flag).start()
+
+            # Reset blink count and timer
+            blink_count = 0
+            start_time = time.time()
+
+
 
         # Draw facial landmarks
         for (x, y) in landmarks:
