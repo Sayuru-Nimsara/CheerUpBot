@@ -1,19 +1,17 @@
 import threading
-
 import cv2
 import dlib
 import numpy as np
 from scipy.spatial import distance as dist
 import time
+from concurrent.futures import ThreadPoolExecutor
 from newChat import main as startConversation
-
 
 # Load dlib's pre-trained face detector
 detector = dlib.get_frontal_face_detector()
 
 # Load the pre-trained facial landmark predictor
 predictor = dlib.shape_predictor('shape_predictor_68_face_landmarks.dat')
-
 
 # Function to compute the Eye Aspect Ratio (EAR)
 def compute_ear(eye):
@@ -22,7 +20,6 @@ def compute_ear(eye):
     C = dist.euclidean(eye[0], eye[3])
     ear = (A + B) / (2.0 * C)
     return ear
-
 
 # Function to compute the Mouth Aspect Ratio (MAR)
 def mouth_aspect_ratio(mouth):
@@ -33,85 +30,78 @@ def mouth_aspect_ratio(mouth):
     mar = (A + B + C) / (3.0 * D)
     return mar
 
-
 # Define thresholds for EAR and MAR
 EAR_THRESHOLD = 0.23
 MAR_THRESHOLD = 0.31
-BLINK_THRESHOLD = 40
-TIME_WINDOW = 5  # seconds
+BLINK_THRESHOLD = 30
+TIME_WINDOW = 4  # seconds
 
-# Flag to determine if voice chat is active
-voice_chat_active = False
-
-# function to reset voice_chat_active flag
-def reset_voice_chat_flag():
-    global voice_chat_active
-    voice_chat_active = False
+# Event to determine if voice chat is active
+voice_chat_active = threading.Event()
 
 # Initialize blink counter and timer
 blink_count = 0
 start_time = time.time()
 
-# Capture video from the webcam
-cap = cv2.VideoCapture(1)
+# Thread pool executor for handling voice chat
+with ThreadPoolExecutor(max_workers=1) as executor:
 
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        break
+    # Capture video from the webcam
+    cap = cv2.VideoCapture(0)
 
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    faces = detector(gray)
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
 
-    for face in faces:
-        landmarks = predictor(gray, face)
-        landmarks = np.array([(p.x, p.y) for p in landmarks.parts()])
+        # Resize frame for faster processing
+        small_frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
+        gray = cv2.cvtColor(small_frame, cv2.COLOR_BGR2GRAY)
+        faces = detector(gray)
 
-        # Extract eye landmarks
-        left_eye = landmarks[36:42]
-        right_eye = landmarks[42:48]
+        for face in faces:
+            landmarks = predictor(gray, face)
+            landmarks = np.array([(p.x, p.y) for p in landmarks.parts()])
 
-        # Compute EAR for both eyes
-        left_ear = compute_ear(left_eye)
-        right_ear = compute_ear(right_eye)
-        ear = (left_ear + right_ear) / 2.0
+            # Extract eye landmarks
+            left_eye = landmarks[36:42]
+            right_eye = landmarks[42:48]
 
-        # Extract mouth landmarks
-        mouth = landmarks[48:68]
-        mar = mouth_aspect_ratio(mouth)
+            # Compute EAR for both eyes
+            left_ear = compute_ear(left_eye)
+            right_ear = compute_ear(right_eye)
+            ear = (left_ear + right_ear) / 2.0
 
-        # Check if the person is blinking
-        if ear < EAR_THRESHOLD:
-            blink_count += 1
-            print(f"Blink count: {blink_count}")
+            # Extract mouth landmarks
+            mouth = landmarks[48:68]
+            mar = mouth_aspect_ratio(mouth)
 
-        # Check if blinking threshold is reached within the time window or detect yawing
-        elapsed_time = time.time() - start_time
-        if elapsed_time > TIME_WINDOW:
-            if blink_count >= BLINK_THRESHOLD or mar > MAR_THRESHOLD:
-                if not voice_chat_active:  # Start voice chat only if not already active
+            # Check if the person is blinking
+            if ear < EAR_THRESHOLD and not voice_chat_active.is_set():
+                blink_count += 1
+                print(f"Blink count: {blink_count}")
+
+            # Check if blinking threshold is reached within the time window or detect yawning
+            elapsed_time = time.time() - start_time
+            if elapsed_time > TIME_WINDOW:
+                if (blink_count >= BLINK_THRESHOLD or mar > MAR_THRESHOLD) and not voice_chat_active.is_set():
                     print("Boredom detected! Activating voice chat...")
-                    voice_chat_active = True
-                    # Trigger for voice-chat
-                    threading.Thread(target=startConversation).start()
-                    #cv2.putText(frame, "Boredom detected: Excessive Blinking", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-                    # Reset the flag after the voice chat ends
-                    threading.Thread(target=reset_voice_chat_flag).start()
+                    voice_chat_active.set()
+                    executor.submit(startConversation).add_done_callback(lambda _: voice_chat_active.clear())
 
-            # Reset blink count and timer
-            blink_count = 0
-            start_time = time.time()
+                # Reset blink count and timer
+                blink_count = 0
+                start_time = time.time()
 
+            # Draw facial landmarks (optional)
+            for (x, y) in landmarks:
+                cv2.circle(small_frame, (x, y), 2, (0, 255, 0), -1)
 
+        # Display the processed frame
+        cv2.imshow("Frame", small_frame)
 
-        # Draw facial landmarks
-        for (x, y) in landmarks:
-            cv2.circle(frame, (x, y), 2, (0, 255, 0), -1)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
 
-    cv2.imshow("Frame", frame)
-
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-cap.release()
-cv2.destroyAllWindows()
+    cap.release()
+    cv2.destroyAllWindows()
