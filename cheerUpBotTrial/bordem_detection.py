@@ -33,7 +33,7 @@ def mouth_aspect_ratio(mouth):
 # Define thresholds for EAR and MAR
 EAR_THRESHOLD = 0.23
 MAR_THRESHOLD = 0.31
-BLINK_THRESHOLD = 40
+BLINK_THRESHOLD = 30
 TIME_WINDOW = 4  # seconds
 
 # Event to determine if voice chat is active
